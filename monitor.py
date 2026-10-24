@@ -1,6 +1,7 @@
 import os
 import urllib3
 import time
+import uuid
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -31,6 +32,9 @@ def get_grades():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
+    
+    # هاد السطر هو اللي كيحل المشكل ديال المجلد المؤقت
+    chrome_options.add_argument(f"--user-data-dir=/tmp/chrome-user-data-{uuid.uuid4()}")
     
     print("1. Opening browser...")
     driver = webdriver.Chrome(options=chrome_options)
