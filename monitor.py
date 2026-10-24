@@ -10,8 +10,9 @@ PASSWORD = os.environ.get("PASSWORD")
 PHONE = os.environ.get("PHONE")
 API_KEY = os.environ.get("API_KEY")
 
-LOGIN_URL = "https://firstprepa.com/"
-NOTES_URL = "https://firstprepa.com/etudiant/notes.php"
+# تحديث الروابط بناءً على المعلومات الجديدة
+LOGIN_URL = "https://www.firstprepa.com/cpge/index.php"
+NOTES_URL = "https://www.firstprepa.com/cpge/index.php?r=evaluation/notation/admin&id_eleve=4046"
 
 def send_whatsapp(message):
     url = f"https://api.textmebot.com/send.php?recipient={PHONE}&apikey={API_KEY}&text={message}"
@@ -30,29 +31,33 @@ def get_grades():
     print("1. جاري تسجيل الدخول...")
     login_data = {'nom_utilisateur': USERNAME, 'mot_de_passe': PASSWORD}
     try:
-        response = session.post(LOGIN_URL, data=login_data, headers=headers, verify=False, timeout=20)
-        print(f"Login Status Code: {response.status_code}")
+        # تسجيل الدخول
+        session.post(LOGIN_URL, data=login_data, headers=headers, verify=False, timeout=20)
+        print("تم إرسال طلب تسجيل الدخول.")
     except Exception as e:
         print(f"Login Error: {e}")
         return None
 
     print("2. جاري جلب صفحة النقط...")
     try:
+        # استخدام الرابط الجديد لجلب صفحة النقط
         notes_response = session.get(NOTES_URL, headers=headers, verify=False, timeout=20)
         print(f"Notes Page Status Code: {notes_response.status_code}")
     except Exception as e:
         print(f"Notes Error: {e}")
         return None
     
+    # التحقق مما إذا كنا قد تمت إعادتنا إلى صفحة تسجيل الدخول
     if "Connexion" in notes_response.text and "Mot de passe" in notes_response.text:
-        print("❌ فشل الاتصال! الموقع مارضاش يقبل الدخول (يمكن الباسورد غالط ولا الموقع كيبلوكي GitHub).")
+        print("❌ فشل الاتصال! الموقع أعادنا إلى صفحة تسجيل الدخول. تأكد من صحة بيانات الدخول.")
         return None
 
     soup = BeautifulSoup(notes_response.text, 'html.parser')
+    # البحث عن الجدول
     table = soup.find('table')
     
     if not table:
-        print("❌ مالقيتش الجدول فالصفحة! يمكن الرابط ديال النقط ماشي هو هادا.")
+        print("❌ لم يتم العثور على الجدول في الصفحة! قد يكون الرابط خاطئًا أو أن هيكل الصفحة قد تغير.")
         return []
 
     grades = []
@@ -70,15 +75,15 @@ def get_grades():
                 "note": cols[5].text.strip(),
                 "classement": cols[6].text.strip()
             })
-    print(f"✅ تلقينا {len(grades)} ديال السطور من الجدول.")
+    print(f"✅ تم العثور على {len(grades)} صفًا في الجدول.")
     return grades
 
 def main():
-    print("بدا الفحص...")
+    print("بدء الفحص...")
     current_grades = get_grades()
     
     if not current_grades:
-        print("ماكاين حتى شي معلومات باش نصيفطو.")
+        print("لا توجد معلومات لإرسالها.")
         return 
 
     message = "📊 *الجدول الحالي للنقط:*\n\n"
