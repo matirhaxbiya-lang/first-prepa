@@ -14,13 +14,13 @@ LOGIN_URL = "https://firstprepa.com/"
 NOTES_URL = "https://firstprepa.com/etudiant/notes.php"
 
 def send_whatsapp(message):
-    # هنا استعملنا TextMeBot عوض CallMeBot
-    url = f"https://api.textmebot.com/send.php?recipient={PHONE}&apikey={API_KEY}&text={message}"    try:
+    # هنا استعملنا TextMeBot
+    url = f"https://api.textmebot.com/send.php?recipient={PHONE}&apikey={API_KEY}&text={message}"
+    try:
         requests.get(url)
         print("WhatsApp sent!")
     except Exception as e:
         print(f"Error: {e}")
-
 def get_grades():
     session = requests.Session()
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
