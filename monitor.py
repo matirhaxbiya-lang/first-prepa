@@ -14,8 +14,8 @@ LOGIN_URL = "https://firstprepa.com/"
 NOTES_URL = "https://firstprepa.com/etudiant/notes.php"
 
 def send_whatsapp(message):
-    url = f"https://api.callmebot.com/whatsapp.php?phone={PHONE}&text={message}&apikey={API_KEY}"
-    try:
+    # هنا استعملنا TextMeBot عوض CallMeBot
+    url = f"https://api.textmebot.com/send.php?recipient={PHONE}&apikey={API_KEY}&text={message}"    try:
         requests.get(url)
         print("WhatsApp sent!")
     except Exception as e:
