@@ -1,0 +1,30 @@
+name: FirstPrepa Hourly Table Sender
+
+on:
+  schedule:
+    - cron: '0 * * * *' 
+  workflow_dispatch: 
+
+jobs:
+  check_grades:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 selenium
+
+      - name: Run script
+        env:
+          LOGIN: ${{ secrets.LOGIN }}
+          PASSWORD: ${{ secrets.PASSWORD }}
+          PHONE: ${{ secrets.PHONE }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: python monitor.py
