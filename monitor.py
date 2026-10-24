@@ -25,22 +25,37 @@ def get_grades():
     session = requests.Session()
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
-    print("1. جاري تسجيل الدخول...")
-    login_data = {'nom_utilisateur': USERNAME, 'mot_de_passe': PASSWORD}
-    session.post(LOGIN_URL, data=login_data, headers=headers, verify=False, timeout=20)
+    print("1. جاري تحميل صفحة الدخول لجلب الكود السري (CSRF)...")
+    login_page = session.get(LOGIN_URL, headers=headers, verify=False, timeout=20)
+    soup_login = BeautifulSoup(login_page.text, 'html.parser')
 
-    print("2. جاري جلب صفحة النقط...")
+    # تجهيز البيانات مع اللوجين والباسورد
+    payload = {
+        'nom_utilisateur': USERNAME,
+        'mot_de_passe': PASSWORD
+    }
+
+    # البحث عن أي حقول مخفية (بحال الـ CSRF) وإضافتها للبيانات
+    hidden_inputs = soup_login.find_all("input", type="hidden")
+    for hidden in hidden_inputs:
+        name = hidden.get('name')
+        value = hidden.get('value')
+        if name:
+            payload[name] = value
+            print(f"تم جلب حقل مخفي: {name}")
+
+    print("2. جاري تسجيل الدخول...")
+    session.post(LOGIN_URL, data=payload, headers=headers, verify=False, timeout=20)
+
+    print("3. جاري جلب صفحة النقط...")
     notes_response = session.get(NOTES_URL, headers=headers, verify=False, timeout=20)
-    print(f"Notes Page Status Code: {notes_response.status_code}")
     
-    soup = BeautifulSoup(notes_response.text, 'html.parser')
-    
-    # --- سطور جديدة باش نشوفو شنو كاين فالصفحة ---
-    print("--- بداية كود الصفحة ---")
-    print(notes_response.text[:500]) # كيطبع أول 500 حرف من الصفحة
-    print("--- نهاية كود الصفحة ---")
-    # ---------------------------------------------
+    # التحقق واش مازال كيرجعنا لصفحة الدخول
+    if 'id="login"' in notes_response.text:
+        print("❌ فشل الاتصال! الموقع مازال كيرجعنا لصفحة الدخول.")
+        return None
 
+    soup = BeautifulSoup(notes_response.text, 'html.parser')
     table = soup.find('table')
     
     if not table:
@@ -61,15 +76,18 @@ def get_grades():
                 "note": cols[5].text.strip(),
                 "classement": cols[6].text.strip()
             })
+    print(f"✅ تلقينا {len(grades)} ديال السطور من الجدول.")
     return grades
 
 def main():
     current_grades = get_grades()
     if not current_grades:
         return 
+    
     message = "📊 *الجدول الحالي للنقط:*\n\n"
     for grade in current_grades:
         message += f"📚 *المادة:* {grade['matiere']}\n💯 *النقطة:* {grade['note']}\n🏆 *الترتيب:* {grade['classement']}\n---\n"
+    
     send_whatsapp(message)
 
 if __name__ == "__main__":
