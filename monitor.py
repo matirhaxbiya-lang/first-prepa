@@ -5,6 +5,8 @@ import uuid
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import requests
 from bs4 import BeautifulSoup
 
@@ -32,8 +34,6 @@ def get_grades():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
-    
-    # هاد السطر هو اللي كيحل المشكل ديال المجلد المؤقت
     chrome_options.add_argument(f"--user-data-dir=/tmp/chrome-user-data-{uuid.uuid4()}")
     
     print("1. Opening browser...")
@@ -42,28 +42,51 @@ def get_grades():
     try:
         print("2. Loading login page...")
         driver.get(LOGIN_URL)
+        
+        # نسنى شي 2 ثواني، ومن بعد نشوفو واش كاين iframe
         time.sleep(2)
+        iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        if iframes:
+            print(f"Found {len(iframes)} iframes. Switching to the first one...")
+            driver.switch_to.frame(iframes[0])
+            
+        print("3. Waiting for login inputs...")
+        try:
+            # هاد الكود كيتسنى 15 ثانية حتى تبان خانة السمية
+            username_input = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.NAME, "LoginForm[username]"))
+            )
+            password_input = driver.find_element(By.NAME, "LoginForm[password]")
+            
+            print("4. Entering credentials...")
+            username_input.send_keys(USERNAME)
+            password_input.send_keys(PASSWORD)
+            
+            # كيقلب على زر الدخول بأي شكل
+            submit_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], .btn-primary")
+            submit_btn.click()
+            
+            time.sleep(5) # كنسناو الدخول يكمل
+            
+        except Exception as e:
+            print(f"Error finding login elements: {e}")
+            print("--- HTML DUMP START ---")
+            print(driver.page_source[:1000]) 
+            print("--- HTML DUMP END ---")
+            driver.quit()
+            return None
 
-        print("3. Entering credentials...")
-        username_input = driver.find_element(By.NAME, "LoginForm[username]")
-        password_input = driver.find_element(By.NAME, "LoginForm[password]")
+        # نرجعو للصفحة الرئيسية إلا كنا دخلنا عبر iframe
+        driver.switch_to.default_content()
         
-        username_input.send_keys(USERNAME)
-        password_input.send_keys(PASSWORD)
-        
-        submit_btn = driver.find_element(By.NAME, "yt0")
-        submit_btn.click()
-        
-        time.sleep(3)
-
-        print("4. Loading notes page...")
+        print("5. Loading notes page...")
         driver.get(NOTES_URL)
-        time.sleep(2)
+        time.sleep(3)
         
         page_source = driver.page_source
         
         if 'id="login"' in page_source or "LoginForm" in page_source:
-            print("ERROR: Still on login page. Site might be blocking GitHub.")
+            print("ERROR: Still on login page.")
             driver.quit()
             return None
 
