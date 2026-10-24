@@ -16,7 +16,8 @@ NOTES_URL = "https://www.firstprepa.com/cpge/index.php?r=evaluation/notation/adm
 def send_whatsapp(message):
     url = f"https://api.textmebot.com/send.php?recipient={PHONE}&apikey={API_KEY}&text={message}"
     try:
-        requests.get(url, timeout=15)
+        res = requests.get(url, timeout=15)
+        print(f"WhatsApp API Status: {res.status_code}")
         print("WhatsApp sent!")
     except Exception as e:
         print(f"WhatsApp Error: {e}")
@@ -29,18 +30,14 @@ def get_grades():
     login_page = session.get(LOGIN_URL, headers=headers, verify=False, timeout=20)
     soup_login = BeautifulSoup(login_page.text, 'html.parser')
 
-    # --- هاد الجزء باش نكشفو أسماء الخانات ---
-    print("--- حقول الإدخال الموجودة في صفحة الدخول ---")
-    for inp in soup_login.find_all('input'):
-        print(f"Name: {inp.get('name')} | Type: {inp.get('type')}")
-    print("---------------------------------------------")
-    # ------------------------------------------
-
+    # هنا حطينا الأسماء الصحيحة اللي كشفناها
     payload = {
-        'nom_utilisateur': USERNAME, # هادي مؤقتة
-        'mot_de_passe': PASSWORD     # هادي مؤقتة
+        'LoginForm[username]': USERNAME, 
+        'LoginForm[password]': PASSWORD,
+        'LoginForm[rememberMe]': '0'
     }
 
+    # كنجيبو الـ CSRF token (كود الأمان) ونضيفوه
     hidden_inputs = soup_login.find_all("input", type="hidden")
     for hidden in hidden_inputs:
         name = hidden.get('name')
@@ -48,36 +45,60 @@ def get_grades():
         if name:
             payload[name] = value
 
-    print("2. جاري تسجيل الدخول (محاولة)...")
+    print("2. جاري تسجيل الدخول...")
     session.post(LOGIN_URL, data=payload, headers=headers, verify=False, timeout=20)
 
     print("3. جاري جلب صفحة النقط...")
     notes_response = session.get(NOTES_URL, headers=headers, verify=False, timeout=20)
     
+    # نتأكدو واش مازال كيرجعنا لصفحة الدخول
     if 'id="login"' in notes_response.text:
-        print("❌ فشل الاتصال! (طبيعي حيت مازال ما صلحناش الأسماء).")
+        print("❌ فشل الاتصال! الموقع مازال كيرجعنا لصفحة الدخول.")
         return None
 
-    # (باقي الكود ديال قراءة الجدول وصيفط الواتساب)
     soup = BeautifulSoup(notes_response.text, 'html.parser')
     table = soup.find('table')
-    if not table: return []
     
+    if not table:
+        print("❌ مالقيتش الجدول فالصفحة! يمكن الرابط ديال النقط ماشي هو هادا.")
+        return []
+
     grades = []
     for row in table.find_all('tr'):
         cols = row.find_all('td')
         if len(cols) >= 7:
-            if not cols[3].text.strip(): continue
-            grades.append({"matiere": cols[3].text.strip(), "note": cols[5].text.strip(), "classement": cols[6].text.strip()})
+            matiere = cols[3].text.strip()
+            if not matiere: continue
+            grades.append({
+                "matiere": matiere,
+                "evaluation": cols[1].text.strip(),
+                "enseignant": cols[2].text.strip(),
+                "date": cols[4].text.strip(),
+                "note": cols[5].text.strip(),
+                "classement": cols[6].text.strip()
+            })
+    print(f"✅ تلقينا {len(grades)} ديال السطور من الجدول.")
     return grades
 
 def main():
+    print("بدا الفحص...")
     current_grades = get_grades()
-    if not current_grades: return 
+    
+    if not current_grades:
+        print("ماكاين حتى شي معلومات باش نصيفطو.")
+        return 
+
     message = "📊 *الجدول الحالي للنقط:*\n\n"
     for grade in current_grades:
-        message += f"📚 {grade['matiere']} | 💯 {grade['note']} | 🏆 {grade['classement']}\n"
+        message += f"📚 *المادة:* {grade['matiere']}\n"
+        message += f"📝 *الامتحان:* {grade['evaluation']}\n"
+        message += f"👨‍🏫 *الأستاذ:* {grade['enseignant']}\n"
+        message += f"📅 *التاريخ:* {grade['date']}\n"
+        message += f"💯 *النقطة:* {grade['note']}\n"
+        message += f"🏆 *الترتيب:* {grade['classement']}\n"
+        message += "-------------------\n"
+
     send_whatsapp(message)
 
 if __name__ == "__main__":
-    main()
+    main() 
