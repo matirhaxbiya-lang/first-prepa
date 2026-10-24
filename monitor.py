@@ -1,7 +1,10 @@
-import requests
-from bs4 import BeautifulSoup
 import os
 import urllib3
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+import requests
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -10,8 +13,7 @@ PASSWORD = os.environ.get("PASSWORD")
 PHONE = os.environ.get("PHONE")
 API_KEY = os.environ.get("API_KEY")
 
-# هنا حطينا رابط الدخول الصحيح ديال Yii
-LOGIN_URL = "https://www.firstprepa.com/cpge/index.php?r=site/login"
+LOGIN_URL = "https://www.firstprepa.com/cpge/index.php"
 NOTES_URL = "https://www.firstprepa.com/cpge/index.php?r=evaluation/notation/admin&id_eleve=4046"
 
 def send_whatsapp(message):
@@ -23,69 +25,79 @@ def send_whatsapp(message):
         print(f"WhatsApp Error: {e}")
 
 def get_grades():
-    session = requests.Session()
+    # إعدادات المتصفح باش يخدم فالسيرفر بلا واجهة
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
     
-    # هنا زدنا معلومات المتصفح باش الموقع ما يشكش فيها
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Referer': LOGIN_URL,
-        'Origin': 'https://www.firstprepa.com'
-    }
+    print("1. جاري فتح المتصفح...")
+    driver = webdriver.Chrome(options=chrome_options)
     
-    print("1. جاري تحميل صفحة الدخول...")
-    login_page = session.get(LOGIN_URL, headers=headers, verify=False, timeout=20)
-    soup_login = BeautifulSoup(login_page.text, 'html.parser')
+    try:
+        print("2. جاري فتح صفحة الدخول...")
+        driver.get(LOGIN_URL)
+        time.sleep(2) # كنسناو الصفحة تشارجي
 
-    payload = {
-        'LoginForm[username]': USERNAME, 
-        'LoginForm[password]': PASSWORD,
-        'LoginForm[rememberMe]': '0'
-    }
+        print("3. جاري كتابة اللوجين والباسورد...")
+        # كنقلبو على الخانات ونكتبو فيهم
+        username_input = driver.find_element(By.NAME, "LoginForm[username]")
+        password_input = driver.find_element(By.NAME, "LoginForm[password]")
+        
+        username_input.send_keys(USERNAME)
+        password_input.send_keys(PASSWORD)
+        
+        # كنكليكيو على زر الدخول
+        submit_btn = driver.find_element(By.NAME, "yt0") # غالباً هادا هو اسم زر الدخول
+        submit_btn.click()
+        
+        time.sleep(3) # كنسناو الدخول يكمل
 
-    hidden_inputs = soup_login.find_all("input", type="hidden")
-    for hidden in hidden_inputs:
-        name = hidden.get('name')
-        value = hidden.get('value')
-        if name:
-            payload[name] = value
+        print("4. جاري فتح صفحة النقط...")
+        driver.get(NOTES_URL)
+        time.sleep(2)
+        
+        page_source = driver.page_source
+        
+        if "id=\"login\"" in page_source or "LoginForm" in page_source:
+            print("❌ فشل الاتصال! مازال كيرجعنا لصفحة الدخول.")
+            driver.quit()
+            return None
 
-    print("2. جاري تسجيل الدخول...")
-    # كنصيفطو الطلب لرابط الدخول الصحيح
-    session.post(LOGIN_URL, data=payload, headers=headers, verify=False, timeout=20)
+        # كنقلبو على الجدول ونقراو السطور
+        import bs4
+        soup = bs4.BeautifulSoup(page_source, 'html.parser')
+        table = soup.find('table')
+        
+        if not table:
+            print("❌ مالقيتش الجدول!")
+            driver.quit()
+            return []
 
-    print("3. جاري جلب صفحة النقط...")
-    notes_response = session.get(NOTES_URL, headers=headers, verify=False, timeout=20)
-    
-    if 'id="login"' in notes_response.text or 'LoginForm' in notes_response.text:
-        print("❌ فشل الاتصال! الموقع مازال كيرجعنا لصفحة الدخول.")
-        print("💡 السبب: الموقع كيحظر السيرفرات ديال GitHub.")
+        grades = []
+        for row in table.find_all('tr'):
+            cols = row.find_all('td')
+            if len(cols) >= 7:
+                matiere = cols[3].text.strip()
+                if not matiere: continue
+                grades.append({
+                    "matiere": matiere,
+                    "evaluation": cols[1].text.strip(),
+                    "enseignant": cols[2].text.strip(),
+                    "date": cols[4].text.strip(),
+                    "note": cols[5].text.strip(),
+                    "classement": cols[6].text.strip()
+                })
+        
+        print(f"✅ تلقينا {len(grades)} ديال السطور.")
+        driver.quit()
+        return grades
+        
+    except Exception as e:
+        print(f"❌ وقع خطأ: {e}")
+        driver.quit()
         return None
-
-    soup = BeautifulSoup(notes_response.text, 'html.parser')
-    table = soup.find('table')
-    
-    if not table:
-        print("❌ مالقيتش الجدول فالصفحة!")
-        return []
-
-    grades = []
-    for row in table.find_all('tr'):
-        cols = row.find_all('td')
-        if len(cols) >= 7:
-            matiere = cols[3].text.strip()
-            if not matiere: continue
-            grades.append({
-                "matiere": matiere,
-                "evaluation": cols[1].text.strip(),
-                "enseignant": cols[2].text.strip(),
-                "date": cols[4].text.strip(),
-                "note": cols[5].text.strip(),
-                "classement": cols[6].text.strip()
-            })
-    print(f"✅ تلقينا {len(grades)} ديال السطور.")
-    return grades
 
 def main():
     current_grades = get_grades()
