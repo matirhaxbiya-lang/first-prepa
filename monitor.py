@@ -10,34 +10,40 @@ PASSWORD = os.environ.get("PASSWORD")
 PHONE = os.environ.get("PHONE")
 API_KEY = os.environ.get("API_KEY")
 
-LOGIN_URL = "https://www.firstprepa.com/cpge/index.php"
+# هنا حطينا رابط الدخول الصحيح ديال Yii
+LOGIN_URL = "https://www.firstprepa.com/cpge/index.php?r=site/login"
 NOTES_URL = "https://www.firstprepa.com/cpge/index.php?r=evaluation/notation/admin&id_eleve=4046"
 
 def send_whatsapp(message):
     url = f"https://api.textmebot.com/send.php?recipient={PHONE}&apikey={API_KEY}&text={message}"
     try:
-        res = requests.get(url, timeout=15)
-        print(f"WhatsApp API Status: {res.status_code}")
+        requests.get(url, timeout=15)
         print("WhatsApp sent!")
     except Exception as e:
         print(f"WhatsApp Error: {e}")
 
 def get_grades():
     session = requests.Session()
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    # هنا زدنا معلومات المتصفح باش الموقع ما يشكش فيها
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': LOGIN_URL,
+        'Origin': 'https://www.firstprepa.com'
+    }
     
     print("1. جاري تحميل صفحة الدخول...")
     login_page = session.get(LOGIN_URL, headers=headers, verify=False, timeout=20)
     soup_login = BeautifulSoup(login_page.text, 'html.parser')
 
-    # هنا حطينا الأسماء الصحيحة اللي كشفناها
     payload = {
         'LoginForm[username]': USERNAME, 
         'LoginForm[password]': PASSWORD,
         'LoginForm[rememberMe]': '0'
     }
 
-    # كنجيبو الـ CSRF token (كود الأمان) ونضيفوه
     hidden_inputs = soup_login.find_all("input", type="hidden")
     for hidden in hidden_inputs:
         name = hidden.get('name')
@@ -46,21 +52,22 @@ def get_grades():
             payload[name] = value
 
     print("2. جاري تسجيل الدخول...")
+    # كنصيفطو الطلب لرابط الدخول الصحيح
     session.post(LOGIN_URL, data=payload, headers=headers, verify=False, timeout=20)
 
     print("3. جاري جلب صفحة النقط...")
     notes_response = session.get(NOTES_URL, headers=headers, verify=False, timeout=20)
     
-    # نتأكدو واش مازال كيرجعنا لصفحة الدخول
-    if 'id="login"' in notes_response.text:
+    if 'id="login"' in notes_response.text or 'LoginForm' in notes_response.text:
         print("❌ فشل الاتصال! الموقع مازال كيرجعنا لصفحة الدخول.")
+        print("💡 السبب: الموقع كيحظر السيرفرات ديال GitHub.")
         return None
 
     soup = BeautifulSoup(notes_response.text, 'html.parser')
     table = soup.find('table')
     
     if not table:
-        print("❌ مالقيتش الجدول فالصفحة! يمكن الرابط ديال النقط ماشي هو هادا.")
+        print("❌ مالقيتش الجدول فالصفحة!")
         return []
 
     grades = []
@@ -77,28 +84,18 @@ def get_grades():
                 "note": cols[5].text.strip(),
                 "classement": cols[6].text.strip()
             })
-    print(f"✅ تلقينا {len(grades)} ديال السطور من الجدول.")
+    print(f"✅ تلقينا {len(grades)} ديال السطور.")
     return grades
 
 def main():
-    print("بدا الفحص...")
     current_grades = get_grades()
+    if not current_grades: return 
     
-    if not current_grades:
-        print("ماكاين حتى شي معلومات باش نصيفطو.")
-        return 
-
-    message = "📊 *الجدول الحالي للنقط:*\n\n"
+    message = "📊 *النقط ديالك:*\n\n"
     for grade in current_grades:
-        message += f"📚 *المادة:* {grade['matiere']}\n"
-        message += f"📝 *الامتحان:* {grade['evaluation']}\n"
-        message += f"👨‍🏫 *الأستاذ:* {grade['enseignant']}\n"
-        message += f"📅 *التاريخ:* {grade['date']}\n"
-        message += f"💯 *النقطة:* {grade['note']}\n"
-        message += f"🏆 *الترتيب:* {grade['classement']}\n"
-        message += "-------------------\n"
-
+        message += f"📚 {grade['matiere']} | 💯 {grade['note']} | 🏆 {grade['classement']}\n"
+    
     send_whatsapp(message)
 
 if __name__ == "__main__":
-    main() 
+    main()
